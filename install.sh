@@ -17,11 +17,13 @@ echo "codeloom installer"
 echo "=================="
 echo
 
-# Check for Claude Code
-if ! command -v claude &> /dev/null; then
-    echo -e "${RED}Error: Claude Code CLI not found.${NC}"
-    echo "Please install Claude Code first: https://docs.anthropic.com/en/docs/claude-code"
-    exit 1
+# Check for Claude Code (skip if running as root since PATH differs)
+if [ "$EUID" -ne 0 ]; then
+    if ! command -v claude &> /dev/null; then
+        echo -e "${YELLOW}Warning: Claude Code CLI not found in PATH.${NC}"
+        echo "Make sure Claude Code is installed: https://docs.anthropic.com/en/docs/claude-code"
+        echo
+    fi
 fi
 
 # Check for Python 3

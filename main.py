@@ -8,6 +8,7 @@ Full session history, live streaming, and interrupt support.
 
 import sys
 import os
+import re
 import signal
 import readline  # Enables line editing and history in input()
 from typing import Optional
@@ -64,6 +65,9 @@ class Codeloom:
 
         while self.running:
             try:
+                # Check for pending process callbacks
+                self._check_process_callbacks()
+
                 # Get shortened path for prompt
                 cwd = os.getcwd()
                 home = os.path.expanduser("~")
@@ -109,13 +113,13 @@ class Codeloom:
         # Get profile context (system prompt + notes)
         profile_context = self.profile_mgr.get_context()
 
-        # Add running process info to context
-        process_summary = self.process_mgr.get_running_summary()
-        if process_summary:
+        # Add process info to context
+        process_context = self._get_process_context()
+        if process_context:
             if profile_context:
-                profile_context += "\n\n" + process_summary
+                profile_context += "\n\n" + process_context
             else:
-                profile_context = process_summary
+                profile_context = process_context
 
         # Start streaming
         self.ui.stream_start()
@@ -144,6 +148,68 @@ class Codeloom:
         # Save AI response
         if response_text.strip():
             self.session_mgr.add_message("assistant", response_text.strip())
+
+        # Check for background process requests in response
+        self._parse_background_requests(response_text)
+
+    def _get_process_context(self) -> str:
+        """Get process-related context for Claude."""
+        parts = []
+
+        # Running processes
+        running_summary = self.process_mgr.get_running_summary()
+        if running_summary:
+            parts.append(running_summary)
+
+        # Instructions for background processes
+        bg_instructions = """To run a long-running command in the background (like a server, build, or test):
+Output: [BACKGROUND] your-command-here
+The command will run in background and you'll be called back with results when it completes."""
+        parts.append(bg_instructions)
+
+        return "\n\n".join(parts)
+
+    def _check_process_callbacks(self):
+        """Check for completed background processes that need Claude review."""
+        pending = self.process_mgr.get_pending_callbacks()
+        for proc in pending:
+            self.ui.print_info(f"Background process [{proc.id}] finished. Sending to Claude for review...")
+            print()
+
+            # Generate callback message
+            callback_msg = self.process_mgr.get_callback_message(proc)
+
+            # Mark as reviewed before sending to avoid loops
+            self.process_mgr.mark_reviewed(proc.id)
+
+            # Send to Claude
+            self._send_message(callback_msg)
+
+    def _parse_background_requests(self, response_text: str):
+        """
+        Parse Claude's response for background process requests.
+
+        Looks for patterns like:
+        [BACKGROUND] command here
+        [BG] command here
+        """
+        # Pattern: [BACKGROUND] or [BG] followed by command
+        patterns = [
+            r'\[BACKGROUND\]\s*(.+?)(?:\n|$)',
+            r'\[BG\]\s*(.+?)(?:\n|$)',
+            r'`\[BACKGROUND\]\s*(.+?)`',
+            r'`\[BG\]\s*(.+?)`',
+        ]
+
+        for pattern in patterns:
+            matches = re.findall(pattern, response_text, re.IGNORECASE)
+            for cmd in matches:
+                cmd = cmd.strip()
+                if cmd:
+                    self.ui.print_info(f"Starting background process: {cmd[:50]}...")
+                    proc = self.process_mgr.run(cmd, callback=True)
+                    self.ui.print_success(f"Started [{proc.id}] - will notify when complete")
+                    print()
 
     def _handle_command(self, command: str):
         """Handle slash commands."""

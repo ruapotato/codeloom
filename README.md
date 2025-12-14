@@ -154,7 +154,20 @@ Run long-running commands (servers, builds, tests) in the background and check o
 /pclean
 ```
 
-Running processes are automatically tracked and their status is included in Claude's context, so Claude knows what's running.
+### Claude-Initiated Background Processes
+
+Claude can also start background processes and get called back when they complete. When Claude outputs:
+
+```
+[BACKGROUND] npm run build
+```
+
+Codeloom will:
+1. Start the command in the background
+2. Let Claude continue or finish its response
+3. When the process completes, automatically send the results back to Claude for review
+
+This is useful for long-running tasks like builds, tests, or starting servers where Claude needs to review the output.
 
 ## Configuration
 

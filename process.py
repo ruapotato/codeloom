@@ -3,6 +3,7 @@ process.py - Background Process Management
 
 Manages long-running background processes that persist across Claude calls.
 Processes are tracked with output captured for later review.
+Supports callbacks to automatically notify Claude when processes complete.
 """
 
 import os
@@ -11,8 +12,8 @@ import subprocess
 import signal
 import threading
 import time
-from dataclasses import dataclass, asdict
-from typing import Optional, List, Dict
+from dataclasses import dataclass, asdict, field
+from typing import Optional, List, Dict, Callable
 from pathlib import Path
 from datetime import datetime
 
@@ -27,6 +28,8 @@ class ProcessInfo:
     status: str  # running, completed, failed, killed
     exit_code: Optional[int] = None
     cwd: str = ""
+    callback: bool = False  # Whether to callback Claude when done
+    reviewed: bool = False  # Whether Claude has reviewed the result
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -40,7 +43,9 @@ class ProcessInfo:
             started_at=data.get("started_at", ""),
             status=data.get("status", "unknown"),
             exit_code=data.get("exit_code"),
-            cwd=data.get("cwd", "")
+            cwd=data.get("cwd", ""),
+            callback=data.get("callback", False),
+            reviewed=data.get("reviewed", False)
         )
 
 
@@ -107,13 +112,14 @@ class ProcessManager:
         """Get the output file path for a process."""
         return self.process_dir / f"{proc_id}.log"
 
-    def run(self, command: str, name: Optional[str] = None) -> ProcessInfo:
+    def run(self, command: str, name: Optional[str] = None, callback: bool = False) -> ProcessInfo:
         """
         Run a command in the background.
 
         Args:
             command: The shell command to run
             name: Optional name/ID for the process
+            callback: If True, flag this process for Claude callback when done
 
         Returns:
             ProcessInfo for the started process
@@ -155,7 +161,9 @@ class ProcessManager:
             command=command,
             started_at=datetime.now().isoformat(),
             status="running",
-            cwd=cwd
+            cwd=cwd,
+            callback=callback,
+            reviewed=False
         )
 
         self.processes[proc_id] = proc_info
@@ -324,3 +332,55 @@ class ProcessManager:
             lines.append(f"  [{proc.id}] {proc.command[:50]}")
 
         return "\n".join(lines)
+
+    def get_pending_callbacks(self) -> List[ProcessInfo]:
+        """
+        Get processes that have completed and need Claude callback.
+
+        Returns:
+            List of completed processes with callback=True and reviewed=False
+        """
+        self._check_running()
+        pending = []
+        for proc in self.processes.values():
+            if proc.callback and not proc.reviewed and proc.status != "running":
+                pending.append(proc)
+        return pending
+
+    def mark_reviewed(self, proc_id: str) -> bool:
+        """Mark a process as reviewed by Claude."""
+        if proc_id in self.processes:
+            self.processes[proc_id].reviewed = True
+            self._save_processes()
+            return True
+        return False
+
+    def get_callback_message(self, proc: 'ProcessInfo', max_output: int = 2000) -> str:
+        """
+        Generate a message for Claude about a completed process.
+
+        Args:
+            proc: The process info
+            max_output: Maximum output characters to include
+
+        Returns:
+            Formatted message for Claude
+        """
+        output = self.get_output(proc.id, tail=100) or "(no output)"
+
+        # Truncate if needed
+        if len(output) > max_output:
+            output = output[:max_output] + "\n... (truncated)"
+
+        status_msg = "completed successfully" if proc.exit_code == 0 else f"failed with exit code {proc.exit_code}"
+
+        return f"""Background process [{proc.id}] has {status_msg}.
+
+Command: {proc.command}
+Working directory: {proc.cwd}
+Exit code: {proc.exit_code}
+
+Output:
+{output}
+
+Please review the output and continue with the next steps."""

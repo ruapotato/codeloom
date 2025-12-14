@@ -7,6 +7,7 @@ A lightweight Claude Code terminal interface designed for phones, SSH sessions, 
 - **Minimal footprint** - Simple ANSI terminal output, no heavy TUI
 - **Live streaming** - See AI responses and command outputs as they happen
 - **Session management** - Full conversation history with save/load
+- **Profile system** - Persistent system prompts and notes
 - **Interrupt support** - Ctrl+C to stop generation
 - **Tool visibility** - See file reads, writes, bash commands, and their outputs
 
@@ -38,9 +39,9 @@ codeloom -l                 # List all sessions
 
 ## Commands
 
+### Session Commands
 | Command | Description |
 |---------|-------------|
-| `/help` | Show help |
 | `/new [name]` | Create new session |
 | `/list` | List all sessions |
 | `/load <id>` | Load a session |
@@ -48,6 +49,22 @@ codeloom -l                 # List all sessions
 | `/rename <name>` | Rename current session |
 | `/delete <id>` | Delete a session |
 | `/history` | Show conversation history |
+
+### Profile Commands
+| Command | Description |
+|---------|-------------|
+| `/profile [name]` | Show current or switch to profile |
+| `/profiles` | List all profiles |
+| `/prompt [text]` | Show or set system prompt |
+| `/note <text>` | Add a persistent note |
+| `/notes` | List all notes |
+| `/note del <n>` | Delete note by number |
+| `/clearnotes` | Clear all notes |
+
+### Other
+| Command | Description |
+|---------|-------------|
+| `/help` | Show help |
 | `/clear` | Clear screen |
 | `/quit` | Exit |
 
@@ -82,9 +99,35 @@ $ ls -la
 → [search results]
 ```
 
+## Profiles
+
+Profiles let you customize how Claude behaves with persistent system prompts and notes.
+
+```bash
+# Create and switch to a new profile
+/profile coding
+
+# Set a system prompt
+/prompt You are a senior Python developer. Prefer simple solutions.
+
+# Add persistent notes (always included in context)
+/note Project uses FastAPI and SQLAlchemy
+/note Follow PEP8 style guidelines
+/note Tests are in tests/ directory
+
+# View current profile
+/profile
+
+# List all profiles
+/profiles
+```
+
+The prompt shows your current path and profile: `~/myproject:coding >`
+
 ## Configuration
 
-Sessions are stored in `~/.config/codeloom/sessions/` as JSON files.
+- Sessions: `~/.config/codeloom/sessions/`
+- Profiles: `~/.config/codeloom/profiles/`
 
 ## License
 

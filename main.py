@@ -161,11 +161,14 @@ class Codeloom:
         if running_summary:
             parts.append(running_summary)
 
-        # Instructions for background processes
-        bg_instructions = """To run a long-running command in the background (like a server, build, or test):
-Output: [BACKGROUND] your-command-here
-The command will run in background and you'll be called back with results when it completes."""
-        parts.append(bg_instructions)
+        # Instructions for process management
+        process_instructions = """Process management commands (output these in your response):
+  [BACKGROUND] command  - Run command in background, get called back when done
+  [BG] command          - Same as above (short form)
+  [PS]                  - List all running processes
+  [KILL] process_id     - Kill a running process
+  [OUTPUT] process_id   - Get output from a process"""
+        parts.append(process_instructions)
 
         return "\n\n".join(parts)
 
@@ -187,21 +190,24 @@ The command will run in background and you'll be called back with results when i
 
     def _parse_background_requests(self, response_text: str):
         """
-        Parse Claude's response for background process requests.
+        Parse Claude's response for process management commands.
 
-        Looks for patterns like:
-        [BACKGROUND] command here
-        [BG] command here
+        Patterns:
+        [BACKGROUND] command - start background process
+        [BG] command - start background process
+        [PS] - list processes
+        [KILL id] - kill a process
+        [OUTPUT id] - get process output
         """
-        # Pattern: [BACKGROUND] or [BG] followed by command
-        patterns = [
+        # Start background process
+        bg_patterns = [
             r'\[BACKGROUND\]\s*(.+?)(?:\n|$)',
             r'\[BG\]\s*(.+?)(?:\n|$)',
             r'`\[BACKGROUND\]\s*(.+?)`',
             r'`\[BG\]\s*(.+?)`',
         ]
 
-        for pattern in patterns:
+        for pattern in bg_patterns:
             matches = re.findall(pattern, response_text, re.IGNORECASE)
             for cmd in matches:
                 cmd = cmd.strip()
@@ -210,6 +216,30 @@ The command will run in background and you'll be called back with results when i
                     proc = self.process_mgr.run(cmd, callback=True)
                     self.ui.print_success(f"Started [{proc.id}] - will notify when complete")
                     print()
+
+        # List processes
+        if re.search(r'\[PS\]|\[LIST.?PROCESSES?\]', response_text, re.IGNORECASE):
+            processes = self.process_mgr.list_processes()
+            self.ui.print_processes(processes)
+
+        # Kill process
+        kill_matches = re.findall(r'\[KILL\]\s*(\S+)', response_text, re.IGNORECASE)
+        for proc_id in kill_matches:
+            proc_id = proc_id.strip()
+            if self.process_mgr.kill(proc_id):
+                self.ui.print_success(f"Killed process: {proc_id}")
+            else:
+                self.ui.print_error(f"Could not kill process: {proc_id}")
+
+        # Get output
+        output_matches = re.findall(r'\[OUTPUT\]\s*(\S+)', response_text, re.IGNORECASE)
+        for proc_id in output_matches:
+            proc_id = proc_id.strip()
+            output = self.process_mgr.get_output(proc_id, tail=50)
+            if output:
+                self.ui.print_process_output(proc_id, output)
+            else:
+                self.ui.print_error(f"No output for process: {proc_id}")
 
     def _handle_command(self, command: str):
         """Handle slash commands."""

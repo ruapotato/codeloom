@@ -57,11 +57,13 @@ class UI:
         print(f"{c.DIM}Type /help for commands, Ctrl+C to interrupt{c.RESET}")
         print()
 
-    def prompt(self, session_name: Optional[str] = None) -> str:
-        """Display the input prompt."""
+    def prompt(self, path: Optional[str] = None, profile: Optional[str] = None) -> str:
+        """Display the input prompt with path:profile format."""
         c = Colors
-        if session_name:
-            prefix = f"{c.DIM}[{session_name}]{c.RESET} "
+        if path and profile:
+            prefix = f"{c.DIM}{path}{c.RESET}:{c.CYAN}{profile}{c.RESET} "
+        elif path:
+            prefix = f"{c.DIM}{path}{c.RESET} "
         else:
             prefix = ""
         return f"{prefix}{c.GREEN}{c.BOLD}>{c.RESET} "
@@ -161,8 +163,7 @@ class UI:
         c = Colors
 
         help_text = f"""
-{c.BOLD}Commands:{c.RESET}
-
+{c.BOLD}Session Commands:{c.RESET}
   {c.CYAN}/new{c.RESET} [name]      Start a new session
   {c.CYAN}/list{c.RESET}            List saved sessions
   {c.CYAN}/load{c.RESET} <id>       Load a session by ID or number
@@ -170,18 +171,85 @@ class UI:
   {c.CYAN}/rename{c.RESET} <name>   Rename current session
   {c.CYAN}/delete{c.RESET} <id>     Delete a session
   {c.CYAN}/history{c.RESET}         Show current session history
+
+{c.BOLD}Profile Commands:{c.RESET}
+  {c.CYAN}/profile{c.RESET} [name]  Show current or switch to profile
+  {c.CYAN}/profiles{c.RESET}        List all profiles
+  {c.CYAN}/prompt{c.RESET} [text]   Show or set system prompt
+  {c.CYAN}/note{c.RESET} <text>     Add a persistent note
+  {c.CYAN}/notes{c.RESET}           List all notes
+  {c.CYAN}/note del{c.RESET} <n>    Delete note by number
+  {c.CYAN}/clearnotes{c.RESET}      Clear all notes
+
+{c.BOLD}Other:{c.RESET}
   {c.CYAN}/clear{c.RESET}           Clear the screen
   {c.CYAN}/help{c.RESET}            Show this help
   {c.CYAN}/quit{c.RESET}            Exit codeloom
 
 {c.BOLD}Tips:{c.RESET}
-
   - Press {c.YELLOW}Ctrl+C{c.RESET} to interrupt AI response
   - Sessions auto-save after each message
-  - History is preserved including full AI output
-
+  - Profiles store system prompts and notes persistently
 """
         print(help_text)
+
+    def print_profile(self, name: str, system_prompt: str, notes: list):
+        """Print current profile details."""
+        c = Colors
+        print(f"{c.BOLD}Profile:{c.RESET} {c.CYAN}{name}{c.RESET}")
+        print()
+        if system_prompt:
+            print(f"{c.BOLD}System Prompt:{c.RESET}")
+            print(f"  {c.DIM}{system_prompt}{c.RESET}")
+        else:
+            print(f"{c.DIM}No system prompt set{c.RESET}")
+        print()
+        if notes:
+            print(f"{c.BOLD}Notes:{c.RESET}")
+            for i, note in enumerate(notes, 1):
+                print(f"  {c.CYAN}{i}.{c.RESET} {note}")
+        else:
+            print(f"{c.DIM}No notes{c.RESET}")
+        print()
+
+    def print_profiles_list(self, profiles: list, current: str):
+        """Print list of profiles."""
+        c = Colors
+        if not profiles:
+            print(f"{c.DIM}No profiles{c.RESET}")
+            return
+
+        print(f"{c.BOLD}Profiles:{c.RESET}")
+        print()
+        for p in profiles:
+            name = p.get("name", "")
+            marker = f"{c.GREEN}*{c.RESET} " if name == current else "  "
+            preview = p.get("system_prompt_preview", "")[:40]
+            notes_count = p.get("notes_count", 0)
+            print(f"{marker}{c.CYAN}{name}{c.RESET}")
+            if preview:
+                print(f"    {c.DIM}{preview}...{c.RESET}")
+            if notes_count:
+                print(f"    {c.DIM}{notes_count} notes{c.RESET}")
+        print()
+        print(f"{c.DIM}Use /profile <name> to switch{c.RESET}")
+        print()
+
+    def print_notes(self, notes: list):
+        """Print list of notes."""
+        c = Colors
+        if not notes:
+            print(f"{c.DIM}No notes in current profile{c.RESET}")
+            print(f"{c.DIM}Use /note <text> to add a note{c.RESET}")
+            return
+
+        print(f"{c.BOLD}Notes:{c.RESET}")
+        print()
+        for i, note in enumerate(notes, 1):
+            print(f"  {c.CYAN}{i}.{c.RESET} {note}")
+        print()
+        print(f"{c.DIM}Use /note del <n> to remove{c.RESET}")
+        print()
 
     def print_history(self, messages: list, limit: int = 20):
         """Print conversation history."""

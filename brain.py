@@ -39,13 +39,14 @@ class ClaudeBrain:
         self._interrupted = False
         self.session_context = session_context
 
-    def send(self, message: str, conversation_history: list = None) -> Generator[StreamEvent, None, None]:
+    def send(self, message: str, conversation_history: list = None, profile_context: str = None) -> Generator[StreamEvent, None, None]:
         """
         Send a message and stream the response.
 
         Args:
             message: User input message
             conversation_history: Previous messages for context (optional)
+            profile_context: System prompt and notes from profile (optional)
 
         Yields:
             StreamEvent objects with response chunks
@@ -53,7 +54,7 @@ class ClaudeBrain:
         self._interrupted = False
 
         # Build the prompt with context if we have history
-        prompt = self._build_prompt(message, conversation_history)
+        prompt = self._build_prompt(message, conversation_history, profile_context)
 
         # Build command with streaming JSON output for live feedback
         cmd = [
@@ -130,35 +131,39 @@ class ClaudeBrain:
                 pass
         return False
 
-    def _build_prompt(self, message: str, history: list = None) -> str:
-        """Build prompt with conversation context."""
-        if not history:
-            return message
+    def _build_prompt(self, message: str, history: list = None, profile_context: str = None) -> str:
+        """Build prompt with profile context and conversation history."""
+        parts = []
 
-        # Build context from history
-        # Format: previous exchanges to give context
-        context_parts = []
+        # Add profile context (system prompt + notes) first
+        if profile_context:
+            parts.append(f"System context:\n{profile_context}")
 
-        # Only include last few exchanges to avoid token limits
-        recent_history = history[-6:] if len(history) > 6 else history
+        # Add conversation history
+        if history:
+            context_parts = []
+            # Only include last few exchanges to avoid token limits
+            recent_history = history[-6:] if len(history) > 6 else history
 
-        for entry in recent_history:
-            role = entry.get("role", "user")
-            content = entry.get("content", "")
+            for entry in recent_history:
+                role = entry.get("role", "user")
+                content = entry.get("content", "")
 
-            if role == "user":
-                context_parts.append(f"User: {content}")
-            elif role == "assistant":
-                # Truncate long responses
-                if len(content) > 500:
-                    content = content[:500] + "..."
-                context_parts.append(f"Assistant: {content}")
+                if role == "user":
+                    context_parts.append(f"User: {content}")
+                elif role == "assistant":
+                    # Truncate long responses
+                    if len(content) > 500:
+                        content = content[:500] + "..."
+                    context_parts.append(f"Assistant: {content}")
 
-        if context_parts:
-            context = "\n".join(context_parts)
-            return f"Previous conversation context:\n{context}\n\nCurrent message: {message}"
+            if context_parts:
+                parts.append(f"Previous conversation:\n" + "\n".join(context_parts))
 
-        return message
+        # Add current message
+        parts.append(f"Current message: {message}")
+
+        return "\n\n".join(parts)
 
     def _parse_stream_event(self, event: dict) -> Generator[StreamEvent, None, None]:
         """Parse a streaming JSON event from Claude Code."""

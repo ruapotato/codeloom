@@ -7,12 +7,14 @@ Full session history, live streaming, and interrupt support.
 """
 
 import sys
+import os
 import signal
 import readline  # Enables line editing and history in input()
 from typing import Optional
 
 from brain import Brain
 from session import SessionManager
+from profile import ProfileManager
 from ui import UI
 
 
@@ -22,6 +24,7 @@ class Codeloom:
     def __init__(self):
         self.ui = UI()
         self.session_mgr = SessionManager()
+        self.profile_mgr = ProfileManager()
         self.brain = Brain()
         self.running = True
         self._setup_signals()
@@ -53,12 +56,22 @@ class Codeloom:
             self.session_mgr.new_session()
 
         session = self.session_mgr.current_session
-        self.ui.print_info(f"Session: {session.name} ({session.id})")
+        profile = self.profile_mgr.current_profile
+        self.ui.print_info(f"Session: {session.name} | Profile: {profile.name}")
         print()
 
         while self.running:
             try:
-                prompt = self.ui.prompt(self.session_mgr.current_session.name)
+                # Get shortened path for prompt
+                cwd = os.getcwd()
+                home = os.path.expanduser("~")
+                if cwd.startswith(home):
+                    display_path = "~" + cwd[len(home):]
+                else:
+                    display_path = cwd
+
+                profile_name = self.profile_mgr.current_profile.name if self.profile_mgr.current_profile else "default"
+                prompt = self.ui.prompt(display_path, profile_name)
                 user_input = input(prompt).strip()
 
                 if not user_input:
@@ -91,12 +104,15 @@ class Codeloom:
         # Get conversation history for context
         history = self.session_mgr.get_history()[:-1]  # Exclude current message
 
+        # Get profile context (system prompt + notes)
+        profile_context = self.profile_mgr.get_context()
+
         # Start streaming
         self.ui.stream_start()
 
         response_text = ""
         try:
-            for event in self.brain.send(message, history):
+            for event in self.brain.send(message, history, profile_context):
                 if event.is_error:
                     self.ui.print_error(event.text)
                     return
@@ -203,6 +219,63 @@ class Codeloom:
                 for m in (self.session_mgr.current_session.messages if self.session_mgr.current_session else [])
             ]
             self.ui.print_history(messages)
+
+        # Profile commands
+        elif cmd == "profile":
+            if not args:
+                # Show current profile
+                p = self.profile_mgr.current_profile
+                self.ui.print_profile(p.name, p.system_prompt, p.notes)
+            else:
+                # Switch to profile
+                profile = self.profile_mgr.load_profile(args)
+                if profile:
+                    self.ui.print_success(f"Switched to profile: {profile.name}")
+                else:
+                    # Create new profile
+                    profile = self.profile_mgr.new_profile(args)
+                    self.ui.print_success(f"Created new profile: {profile.name}")
+
+        elif cmd == "profiles":
+            profiles = self.profile_mgr.list_profiles()
+            self.ui.print_profiles_list(profiles, self.profile_mgr.current_profile.name)
+
+        elif cmd == "prompt":
+            if not args:
+                # Show current prompt
+                prompt = self.profile_mgr.get_system_prompt()
+                if prompt:
+                    self.ui.print_info(f"System prompt:\n{prompt}")
+                else:
+                    self.ui.print_info("No system prompt set")
+            else:
+                # Set new prompt
+                self.profile_mgr.set_system_prompt(args)
+                self.ui.print_success("System prompt updated")
+
+        elif cmd == "note":
+            if not args:
+                self.ui.print_error("Usage: /note <text> to add, /notes to list, /note del <n> to remove")
+            elif args.startswith("del "):
+                try:
+                    idx = int(args[4:].strip())
+                    if self.profile_mgr.remove_note(idx):
+                        self.ui.print_success(f"Removed note {idx}")
+                    else:
+                        self.ui.print_error(f"Invalid note number: {idx}")
+                except ValueError:
+                    self.ui.print_error("Usage: /note del <number>")
+            else:
+                self.profile_mgr.add_note(args)
+                self.ui.print_success("Note added")
+
+        elif cmd == "notes":
+            notes = self.profile_mgr.list_notes()
+            self.ui.print_notes(notes)
+
+        elif cmd == "clearnotes":
+            self.profile_mgr.clear_notes()
+            self.ui.print_success("All notes cleared")
 
         else:
             self.ui.print_error(f"Unknown command: /{cmd}")

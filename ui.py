@@ -181,6 +181,13 @@ class UI:
   {c.CYAN}/note del{c.RESET} <n>    Delete note by number
   {c.CYAN}/clearnotes{c.RESET}      Clear all notes
 
+{c.BOLD}Process Commands:{c.RESET}
+  {c.CYAN}/run{c.RESET} <cmd>        Run command in background
+  {c.CYAN}/ps{c.RESET}               List all processes (/ps -r for running only)
+  {c.CYAN}/output{c.RESET} <id>      Show process output (/out <id> [lines])
+  {c.CYAN}/kill{c.RESET} <id>        Kill a running process
+  {c.CYAN}/pclean{c.RESET}           Remove finished processes
+
 {c.BOLD}Other:{c.RESET}
   {c.CYAN}/clear{c.RESET}           Clear the screen
   {c.CYAN}/help{c.RESET}            Show this help
@@ -189,7 +196,7 @@ class UI:
 {c.BOLD}Tips:{c.RESET}
   - Press {c.YELLOW}Ctrl+C{c.RESET} to interrupt AI response
   - Sessions auto-save after each message
-  - Profiles store system prompts and notes persistently
+  - Background processes persist across sessions
 """
         print(help_text)
 
@@ -249,6 +256,46 @@ class UI:
             print(f"  {c.CYAN}{i}.{c.RESET} {note}")
         print()
         print(f"{c.DIM}Use /note del <n> to remove{c.RESET}")
+        print()
+
+    def print_processes(self, processes: list):
+        """Print list of background processes."""
+        c = Colors
+        if not processes:
+            print(f"{c.DIM}No background processes{c.RESET}")
+            return
+
+        print(f"{c.BOLD}Background Processes:{c.RESET}")
+        print()
+        for proc in processes:
+            status = proc.status
+            if status == "running":
+                status_color = c.GREEN
+                status_icon = "●"
+            elif status == "completed":
+                status_color = c.BLUE
+                status_icon = "✓"
+            elif status == "failed":
+                status_color = c.RED
+                status_icon = "✗"
+            else:
+                status_color = c.YELLOW
+                status_icon = "○"
+
+            cmd_preview = proc.command[:40] + "..." if len(proc.command) > 40 else proc.command
+            print(f"  {status_color}{status_icon}{c.RESET} [{c.CYAN}{proc.id}{c.RESET}] {cmd_preview}")
+            print(f"    {c.DIM}PID: {proc.pid} | Status: {status} | Started: {proc.started_at[:16]}{c.RESET}")
+        print()
+        print(f"{c.DIM}Use /output <id> to see output, /kill <id> to stop{c.RESET}")
+        print()
+
+    def print_process_output(self, proc_id: str, output: str):
+        """Print process output."""
+        c = Colors
+        print(f"{c.BOLD}Output [{proc_id}]:{c.RESET}")
+        print(f"{c.DIM}{'─' * 40}{c.RESET}")
+        print(output)
+        print(f"{c.DIM}{'─' * 40}{c.RESET}")
         print()
 
     def print_history(self, messages: list, limit: int = 20):

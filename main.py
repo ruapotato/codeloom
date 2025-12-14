@@ -15,6 +15,7 @@ from typing import Optional
 from brain import Brain
 from session import SessionManager
 from profile import ProfileManager
+from process import ProcessManager
 from ui import UI
 
 
@@ -25,6 +26,7 @@ class Codeloom:
         self.ui = UI()
         self.session_mgr = SessionManager()
         self.profile_mgr = ProfileManager()
+        self.process_mgr = ProcessManager()
         self.brain = Brain()
         self.running = True
         self._setup_signals()
@@ -106,6 +108,14 @@ class Codeloom:
 
         # Get profile context (system prompt + notes)
         profile_context = self.profile_mgr.get_context()
+
+        # Add running process info to context
+        process_summary = self.process_mgr.get_running_summary()
+        if process_summary:
+            if profile_context:
+                profile_context += "\n\n" + process_summary
+            else:
+                profile_context = process_summary
 
         # Start streaming
         self.ui.stream_start()
@@ -276,6 +286,44 @@ class Codeloom:
         elif cmd == "clearnotes":
             self.profile_mgr.clear_notes()
             self.ui.print_success("All notes cleared")
+
+        # Process commands
+        elif cmd == "run":
+            if not args:
+                self.ui.print_error("Usage: /run <command>")
+                return
+            proc = self.process_mgr.run(args)
+            self.ui.print_success(f"Started [{proc.id}]: {args[:50]}")
+
+        elif cmd == "ps":
+            processes = self.process_mgr.list_processes(include_finished=(args != "-r"))
+            self.ui.print_processes(processes)
+
+        elif cmd == "output" or cmd == "out":
+            if not args:
+                self.ui.print_error("Usage: /output <process_id> [lines]")
+                return
+            parts = args.split()
+            proc_id = parts[0]
+            lines = int(parts[1]) if len(parts) > 1 else 50
+            output = self.process_mgr.get_output(proc_id, tail=lines)
+            if output:
+                self.ui.print_process_output(proc_id, output)
+            else:
+                self.ui.print_error(f"Process not found: {proc_id}")
+
+        elif cmd == "kill":
+            if not args:
+                self.ui.print_error("Usage: /kill <process_id>")
+                return
+            if self.process_mgr.kill(args):
+                self.ui.print_success(f"Killed process: {args}")
+            else:
+                self.ui.print_error(f"Could not kill process: {args}")
+
+        elif cmd == "pclean":
+            count = self.process_mgr.cleanup()
+            self.ui.print_success(f"Cleaned up {count} finished processes")
 
         else:
             self.ui.print_error(f"Unknown command: /{cmd}")

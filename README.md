@@ -61,6 +61,15 @@ codeloom -l                 # List all sessions
 | `/note del <n>` | Delete note by number |
 | `/clearnotes` | Clear all notes |
 
+### Process Commands
+| Command | Description |
+|---------|-------------|
+| `/run <cmd>` | Run command in background |
+| `/ps` | List all processes (`/ps -r` for running only) |
+| `/output <id>` | Show process output (alias: `/out`) |
+| `/kill <id>` | Kill a running process |
+| `/pclean` | Remove finished processes from list |
+
 ### Other
 | Command | Description |
 |---------|-------------|
@@ -124,10 +133,34 @@ Profiles let you customize how Claude behaves with persistent system prompts and
 
 The prompt shows your current path and profile: `~/myproject:coding >`
 
+## Background Processes
+
+Run long-running commands (servers, builds, tests) in the background and check on them later:
+
+```bash
+# Start a dev server in background
+/run npm run dev
+
+# List all processes
+/ps
+
+# View output of a process
+/output abc123
+
+# Kill a running process
+/kill abc123
+
+# Clean up finished processes
+/pclean
+```
+
+Running processes are automatically tracked and their status is included in Claude's context, so Claude knows what's running.
+
 ## Configuration
 
 - Sessions: `~/.config/codeloom/sessions/`
 - Profiles: `~/.config/codeloom/profiles/`
+- Processes: `~/.config/codeloom/processes/`
 
 ## License
 
